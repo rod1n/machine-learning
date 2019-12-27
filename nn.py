@@ -13,7 +13,7 @@ class Model(object):
     def add(self, layer):
         self.layers.append(layer)
 
-    def fit(self, X, y, epochs=10, learning_rate=0.01, batch_size=200, validation_fraction=0.1, seed=None, verbose=False):
+    def fit(self, X, y, epochs=10, learning_rate=0.01, batch_size=200, penalty=None, alpha=0.1, validation_fraction=0.1, verbose=False):
         self.scores = {'loss': [], 'acc': []}
 
         if validation_fraction:
@@ -25,8 +25,7 @@ class Model(object):
             y_val = None
 
         n_samples, n_features = X.shape
-        random_state = np.random.RandomState(seed)
-        self._initialize(n_features, random_state)
+        self._initialize(n_features)
 
         if batch_size is None:
             batch_size = n_samples
@@ -42,9 +41,13 @@ class Model(object):
                 loss += scores['loss']
                 accuracy += scores['acc']
 
+                if penalty is 'l2':
+                    penalty_term = alpha * np.sum([np.dot(layer.weights.ravel(), layer.weights.ravel()) for layer in self.layers]) / 2
+                    loss += penalty_term / n_samples
+
                 y_batch = one_hot(y[batch_slice], output.shape[1])
                 grads = cross_entropy_gradient(y_batch, output)
-                self._backward(grads, learning_rate)
+                self._backward(grads, learning_rate, penalty, alpha)
 
             n_batches = math.ceil(len(X) / batch_size)
             self.scores['loss'].append(loss / n_batches)
@@ -73,9 +76,9 @@ class Model(object):
         accuracy = np.sum(y == np.argmax(output, axis=1)) / len(X)
         return output, {'loss': loss, 'acc': accuracy}
 
-    def _initialize(self, input_shape, random_state):
+    def _initialize(self, input_shape):
         for layer in self.layers:
-            layer.initialize(input_shape, random_state)
+            layer.initialize(input_shape)
             input_shape = layer.units
 
     def _validation_split(self, X, y, fraction):
@@ -92,9 +95,15 @@ class Model(object):
             output = layer.forward(output)
         return output
 
-    def _backward(self, grads, learning_rate):
+    def _backward(self, grads, learning_rate, penalty, alpha):
+        n_samples, _ = grads.shape
+
         for layer in reversed(self.layers):
             weight_grads, bias_grads, grads = layer.backward(grads)
+
+            if penalty is 'l2':
+                weight_grads += alpha * layer.weights / n_samples
+
             layer.weights -= learning_rate * weight_grads
             layer.biases -= learning_rate * bias_grads
 
@@ -108,8 +117,8 @@ class Dense(object):
         self.weights = None
         self.biases = None
 
-    def initialize(self, input_shape, random_state):
-        self.weights = random_state.normal(0.0, 1.0, size=(input_shape, self.units))
+    def initialize(self, input_shape):
+        self.weights = np.random.normal(0.0, 1.0, size=(input_shape, self.units))
         self.biases = np.zeros(shape=self.units)
 
     def forward(self, input):
