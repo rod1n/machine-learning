@@ -1,6 +1,7 @@
 import sys
 
 import numpy as np
+import math
 
 
 class Model(object):
@@ -12,15 +13,23 @@ class Model(object):
     def add(self, layer):
         self.layers.append(layer)
 
-    def fit(self, X, y, epochs=10, learning_rate=0.01, batch_size=200, seed=None, verbose=False):
+    def fit(self, X, y, epochs=10, learning_rate=0.01, batch_size=200, validation_fraction=0.1, seed=None, verbose=False):
+        self.scores = {'loss': [], 'acc': []}
+
+        if validation_fraction:
+            X, y, X_val, y_val = self._validation_split(X, y, validation_fraction)
+            self.scores['val_loss'] = []
+            self.scores['val_acc'] = []
+        else:
+            X_val = None
+            y_val = None
+
         n_samples, n_features = X.shape
         random_state = np.random.RandomState(seed)
         self._initialize(n_features, random_state)
 
         if batch_size is None:
             batch_size = n_samples
-
-        self.scores = {'loss': [], 'acc': []}
 
         for epoch in range(epochs):
             loss = 0.0
@@ -29,18 +38,22 @@ class Model(object):
                 end = start + batch_size
                 batch_slice = slice(start, end)
 
-                output = self._forward(X[batch_slice])
-                _, n_classes = output.shape
-                y_batch = one_hot(y[batch_slice], n_classes)
+                output, scores = self.evaluate(X[batch_slice], y[batch_slice])
+                loss += scores['loss']
+                accuracy += scores['acc']
 
-                loss += np.sum(cross_entropy(y_batch, output))
-                accuracy += np.sum(y[batch_slice] == np.argmax(output, axis=1))
-
+                y_batch = one_hot(y[batch_slice], output.shape[1])
                 grads = cross_entropy_gradient(y_batch, output)
                 self._backward(grads, learning_rate)
 
-            self.scores['loss'].append(loss / len(X))
-            self.scores['acc'].append(accuracy / len(X))
+            n_batches = math.ceil(len(X) / batch_size)
+            self.scores['loss'].append(loss / n_batches)
+            self.scores['acc'].append(accuracy / n_batches)
+
+            if validation_fraction:
+                _, scores = self.evaluate(X_val, y_val)
+                self.scores['val_loss'].append(scores['loss'])
+                self.scores['val_acc'].append(scores['acc'])
 
             if verbose:
                 sys.stdout.write('\rEpoch %*s/%s - loss: %.3f acc: %.3f'
@@ -54,12 +67,24 @@ class Model(object):
         return np.argmax(self._forward(X), axis=1)
 
     def evaluate(self, X, y):
-        return np.sum(y == self.predict(X)) / len(y)
+        output = self._forward(X)
+        _, n_classes = output.shape
+        loss = np.sum(cross_entropy(one_hot(y, n_classes), output)) / len(X)
+        accuracy = np.sum(y == np.argmax(output, axis=1)) / len(X)
+        return output, {'loss': loss, 'acc': accuracy}
 
     def _initialize(self, input_shape, random_state):
         for layer in self.layers:
             layer.initialize(input_shape, random_state)
             input_shape = layer.units
+
+    def _validation_split(self, X, y, fraction):
+        n_val_samples = math.ceil(fraction * len(X))
+        X_val = X[0:n_val_samples]
+        y_val = y[0:n_val_samples]
+        X = X[n_val_samples:]
+        y = y[n_val_samples:]
+        return X, y, X_val, y_val
 
     def _forward(self, X):
         output = X
