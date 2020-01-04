@@ -37,7 +37,7 @@ class Model(object):
                 end = start + batch_size
                 batch_slice = slice(start, end)
 
-                output, scores = self.evaluate(X[batch_slice], y[batch_slice])
+                output, scores = self.evaluate(X[batch_slice], y[batch_slice], True)
                 loss += scores['loss']
                 accuracy += scores['acc']
 
@@ -54,7 +54,7 @@ class Model(object):
             self.scores['acc'].append(accuracy / n_batches)
 
             if validation_fraction:
-                _, scores = self.evaluate(X_val, y_val)
+                _, scores = self.evaluate(X_val, y_val, training=False)
                 self.scores['val_loss'].append(scores['loss'])
                 self.scores['val_acc'].append(scores['acc'])
 
@@ -69,8 +69,8 @@ class Model(object):
     def predict(self, X):
         return np.argmax(self._forward(X), axis=1)
 
-    def evaluate(self, X, y):
-        output = self._forward(X)
+    def evaluate(self, X, y, training=False):
+        output = self._forward(X, training)
         _, n_classes = output.shape
         loss = np.sum(cross_entropy(one_hot(y, n_classes), output)) / len(X)
         accuracy = np.sum(y == np.argmax(output, axis=1)) / len(X)
@@ -78,8 +78,10 @@ class Model(object):
 
     def _initialize(self, input_shape):
         for layer in self.layers:
-            layer.initialize(input_shape)
-            input_shape = layer.units
+            if layer.has_trainable_variables():
+                layer.weights = np.random.normal(0.0, 1.0, size=(input_shape, layer.units))
+                layer.biases = np.zeros(shape=layer.units)
+                input_shape = layer.units
 
     def _validation_split(self, X, y, fraction):
         n_val_samples = math.ceil(fraction * len(X))
@@ -89,10 +91,10 @@ class Model(object):
         y = y[n_val_samples:]
         return X, y, X_val, y_val
 
-    def _forward(self, X):
+    def _forward(self, X, training=False):
         output = X
         for layer in self.layers:
-            output = layer.forward(output)
+            output = layer.forward(output, training=training)
         return output
 
     def _backward(self, grads, learning_rate, penalty, alpha):
@@ -104,8 +106,9 @@ class Model(object):
             if penalty is 'l2':
                 weight_grads += alpha * layer.weights / n_samples
 
-            layer.weights -= learning_rate * weight_grads
-            layer.biases -= learning_rate * bias_grads
+            if layer.has_trainable_variables():
+                layer.weights -= learning_rate * weight_grads
+                layer.biases -= learning_rate * bias_grads
 
 
 class Dense(object):
@@ -117,11 +120,10 @@ class Dense(object):
         self.weights = None
         self.biases = None
 
-    def initialize(self, input_shape):
-        self.weights = np.random.normal(0.0, 1.0, size=(input_shape, self.units))
-        self.biases = np.zeros(shape=self.units)
+    def has_trainable_variables(self):
+        return True
 
-    def forward(self, input):
+    def forward(self, input, training=False):
         self.input = input
         Z = np.matmul(self.input, self.weights) + self.biases
 
@@ -148,6 +150,27 @@ class Dense(object):
         bias_grads = np.sum(grads, axis=0) / n_samples
         grads = np.matmul(grads, self.weights.T)
         return weight_grads, bias_grads, grads
+
+
+class Dropout(object):
+
+    def __init__(self, keep_prob):
+        self.keep_prob = keep_prob
+        self.mask = None
+
+    def has_trainable_variables(self):
+        return False
+
+    def forward(self, input, training=False):
+        _, units = input.shape
+        if training:
+            self.mask = np.random.binomial(1, self.keep_prob, size=units) / self.keep_prob
+            return input * self.mask
+        else:
+            return input
+
+    def backward(self, grads):
+        return None, None, grads * self.mask
 
 
 def softmax(X):
