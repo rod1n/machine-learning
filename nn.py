@@ -213,10 +213,64 @@ class Conv2D(object):
         weight_grads = np.sum(input_patches * grads, (0, 2, 3)) / n_samples
         bias_grads = np.sum(grads, (0, 2, 3, 4, 5)) / n_samples
 
-        left, top, *_ = self.padding
+        (left, right), (top, bottom) = self.padding
         input_grads = input_grads[top:top + output_rows, left:left + output_cols]
 
         return weight_grads, bias_grads, input_grads
+
+
+class MaxPooling2D(object):
+
+    def __init__(self, pool_size=(2, 2)):
+        self.pool_size = pool_size
+        self.pool_mask = None
+        self.input_shape = None
+        self.output_shape = None
+        self.padding = None
+
+    def build(self, input_shape):
+        self.input_shape = input_shape
+        self.output_shape = np.ceil(np.divide(input_shape, (1, *self.pool_size))).astype(int)
+
+    def forward(self, input, **kwargs):
+        padded_input, self.padding = pad(input, self.pool_size, stride=self.pool_size)
+
+        batch_size, *_ = input.shape
+        pool_rows, pool_cols = self.pool_size
+        n_filters, output_rows, output_cols = self.output_shape
+
+        self.pool_mask = np.zeros((batch_size, *self.output_shape, pool_rows, pool_cols))
+        output = np.zeros((batch_size, *self.output_shape))
+
+        for row in range(output_rows):
+            for col in range(output_cols):
+                rows = slice(row * pool_rows, row * pool_rows + pool_rows)
+                cols = slice(col * pool_cols, col * pool_cols + pool_cols)
+
+                patches = padded_input[:, :, rows, cols]
+                output[:, :, row, col] = np.max(patches, axis=(2, 3))
+                self.pool_mask[:, :, row, col] = np.max(patches, axis=(2, 3), keepdims=True) == patches
+        return output
+
+    def backward(self, grads):
+        grads = self.pool_mask * grads.reshape((*grads.shape, 1, 1))
+
+        batch_size, *_ = grads.shape
+        padded_shape = np.multiply(self.output_shape, (1, *self.pool_size))
+        _, output_rows, output_cols = self.output_shape
+        pool_rows, pool_cols = self.pool_size
+
+        input_grads = np.zeros(shape=(batch_size, *padded_shape))
+        for row in range(output_rows):
+            for col in range(output_cols):
+                rows = slice(row * pool_rows, row * pool_rows + pool_rows)
+                cols = slice(col * pool_cols, col * pool_cols + pool_cols)
+                input_grads[:,:, rows, cols] = grads[:,:, row, col]
+
+        (left, right), (top, bottom) = self.padding
+        _, input_rows, input_cols = self.input_shape
+        input_grads = input_grads[:, :, top:top + input_rows, left:left + input_cols]
+        return None, None, input_grads
 
 
 class Flatten(object):
@@ -335,12 +389,27 @@ def convolve(input, filters):
     return np.einsum('bijnm,fnm->bfij', input_patches, filters)
 
 
-def pad(input, filter_shape):
-    h_pad, v_pad = np.subtract(filter_shape, 1) / 2
-    left_pad = np.ceil(h_pad).astype(int)
-    right_pad = np.floor(h_pad).astype(int)
-    top_pad = np.ceil(v_pad).astype(int)
-    bottom_pad = np.floor(v_pad).astype(int)
-    result = np.pad(input, ((0, 0), (left_pad, right_pad), (top_pad, bottom_pad)), mode='constant')
-    padding = (left_pad, top_pad, right_pad, bottom_pad)
-    return result, padding
+def pad(input, filter_shape, stride=(1, 1)):
+    *_, input_height, input_widths = input.shape
+    filter_height, filter_width = filter_shape
+    stride_height, stride_widths = stride
+
+    if input_height % stride_height == 0:
+        height_padding = np.max(filter_height - stride_height, 0)
+    else:
+        height_padding = np.max(filter_height - input_height % stride_widths, 0)
+
+    if input_widths % stride_widths == 0:
+        width_padding = np.max(filter_width - stride_widths, 0)
+    else:
+        width_padding = np.max(filter_width - input_widths % stride_widths, 0)
+
+    left = math.ceil(width_padding / 2)
+    right = math.floor(width_padding / 2)
+    top = math.ceil(height_padding / 2)
+    bottom = math.floor(height_padding / 2)
+
+    zero_paddings = (input.ndim - 2) * [(0, 0)]
+    input_padding = ((left, right), (top, bottom))
+    output = np.pad(input, (*zero_paddings, *input_padding), mode='constant')
+    return output, input_padding
