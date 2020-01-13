@@ -12,6 +12,12 @@ class Model(object):
     def add(self, layer):
         self.layers.append(layer)
 
+    def compile(self):
+        input_shape = None
+        for layer in self.layers:
+            layer.build(input_shape)
+            input_shape = layer.output_shape
+
     def fit(self, X, y, epochs=10, learning_rate=0.01, batch_size=200, penalty=None, alpha=0.1, validation_fraction=0, verbose=False):
         self.scores = {'loss': [], 'acc': []}
 
@@ -23,8 +29,7 @@ class Model(object):
             X_val = None
             y_val = None
 
-        n_samples, n_features = X.shape
-        self._initialize(n_features)
+        n_samples, _ = X.shape
 
         if batch_size is None:
             batch_size = n_samples
@@ -42,7 +47,7 @@ class Model(object):
 
                 if penalty is 'l2':
                     penalty_term = alpha * np.sum([np.dot(layer.weights.ravel(), layer.weights.ravel()) for layer in self.layers
-                                                   if layer.has_trainable_variables()]) / 2
+                                                   if hasattr(layer, 'weights')]) / 2
                     loss += penalty_term / n_samples
 
                 y_batch = one_hot(y[batch_slice], output.shape[1])
@@ -76,21 +81,6 @@ class Model(object):
         accuracy = np.sum(y == np.argmax(output, axis=1)) / len(X)
         return output, {'loss': loss, 'acc': accuracy}
 
-    def _initialize(self, input_shape):
-        for layer in self.layers:
-            if layer.has_trainable_variables():
-                if isinstance(layer, Dense):
-                    layer.weights = np.random.normal(0.0, 1.0, size=(input_shape, layer.units))
-                    layer.biases = np.zeros(shape=layer.units)
-                    input_shape = layer.units
-                elif isinstance(layer, Conv2D):
-                    layer.weights = np.random.normal(0.0, 1.0, size=(layer.filters, *layer.kernel_size))
-                    layer.biases = np.zeros(shape=layer.filters)
-                    input_shape = (layer.filters, *layer.input_shape)
-            else:
-                if isinstance(layer, Flatten):
-                    input_shape = np.prod(input_shape)
-
     def _validation_split(self, X, y, fraction):
         n_val_samples = math.ceil(fraction * len(X))
         X_val = X[0:n_val_samples]
@@ -111,28 +101,37 @@ class Model(object):
         for layer in reversed(self.layers):
             weight_grads, bias_grads, grads = layer.backward(grads)
 
-            if penalty is 'l2':
-                if layer.has_trainable_variables():
+            if hasattr(layer, 'weights') and hasattr(layer, 'biases'):
+                if penalty is 'l2':
                     weight_grads += alpha * layer.weights / n_samples
 
-            if layer.has_trainable_variables():
                 layer.weights -= learning_rate * weight_grads
                 layer.biases -= learning_rate * bias_grads
 
 
 class Dense(object):
 
-    def __init__(self, units, activation=None):
+    def __init__(self, units, activation=None, input_shape=None):
         self.units = units
         self.activation = activation
+        self.input_shape = input_shape
         self.input = None
         self.weights = None
         self.biases = None
+        self.output_shape = None
 
-    def has_trainable_variables(self):
-        return True
+    def build(self, input_shape):
+        if input_shape is None:
+            input_shape = self.input_shape
 
-    def forward(self, input, training=False):
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
+
+        self.weights = np.random.normal(0.0, 1.0, size=(*input_shape, self.units))
+        self.biases = np.zeros(shape=self.units)
+        self.output_shape = (self.units,)
+
+    def forward(self, input, **kwargs):
         self.input = input
         Z = np.matmul(self.input, self.weights) + self.biases
 
@@ -156,21 +155,28 @@ class Dense(object):
 
 class Conv2D(object):
 
-    def __init__(self, filters, kernel_size, activation=None, **kwargs):
+    def __init__(self, filters, kernel_size, activation=None, input_shape=None):
         self.filters = filters
         self.kernel_size = kernel_size
         self.activation = activation
+        self.input_shape = input_shape
         self.weights = None
         self.biases = None
+        self.output_shape = None
         self.padded_input = None
         self.padding = None
         self.convs = None
 
-        if 'input_shape' in kwargs:
-            self.input_shape = kwargs['input_shape']
+    def build(self, input_shape):
+        if input_shape is None:
+            input_shape = self.input_shape
 
-    def has_trainable_variables(self):
-        return True
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
+
+        self.weights = np.random.normal(0.0, 1.0, size=(self.filters, *self.kernel_size))
+        self.biases = np.zeros(shape=self.filters)
+        self.output_shape = (self.filters, *self.input_shape)
 
     def forward(self, input, **kwargs):
         input = input.reshape((-1, *self.input_shape))
@@ -216,17 +222,22 @@ class Conv2D(object):
 class Flatten(object):
 
     def __init__(self):
-        self.sample_shape = None
+        self.input_shape = None
+        self.output_shape = None
 
-    def has_trainable_variables(self):
-        return False
+    def build(self, input_shape):
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
+
+        self.input_shape = input_shape
+        self.output_shape = (np.prod(input_shape),)
 
     def forward(self, input, **kwargs):
-        n_samples, *self.sample_shape = input.shape
-        return input.reshape((n_samples, -1))
+        return input.reshape((-1, *self.output_shape))
 
     def backward(self, grads):
-        return None, None, grads.reshape((-1, *self.sample_shape))
+        grads = grads.reshape((-1, *self.input_shape))
+        return None, None, grads
 
 
 class Dropout(object):
@@ -234,9 +245,10 @@ class Dropout(object):
     def __init__(self, keep_prob):
         self.keep_prob = keep_prob
         self.mask = None
+        self.output_shape = None
 
-    def has_trainable_variables(self):
-        return False
+    def build(self, input_shape):
+        self.output_shape = input_shape
 
     def forward(self, input, training=False):
         _, units = input.shape
