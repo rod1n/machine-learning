@@ -168,11 +168,10 @@ class Conv2D(object):
         self.convs = None
 
     def build(self, input_shape):
-        if input_shape is None:
-            input_shape = self.input_shape
-
-        if input_shape is None:
-            raise ValueError('Specify input_shape parameter')
+        if self.input_shape is None:
+            if input_shape is None:
+                raise ValueError('Specify input_shape parameter')
+            self.input_shape = input_shape
 
         self.weights = np.random.normal(0.0, 1.0, size=(self.filters, *self.kernel_size))
         self.biases = np.zeros(shape=self.filters)
@@ -229,6 +228,9 @@ class MaxPooling2D(object):
         self.padding = None
 
     def build(self, input_shape):
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
+
         self.input_shape = input_shape
         self.output_shape = np.ceil(np.divide(input_shape, (1, *self.pool_size))).astype(int)
 
@@ -302,6 +304,8 @@ class Dropout(object):
         self.output_shape = None
 
     def build(self, input_shape):
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
         self.output_shape = input_shape
 
     def forward(self, input, training=False):
