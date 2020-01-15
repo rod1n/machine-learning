@@ -168,15 +168,15 @@ class Conv2D(object):
         self.convs = None
 
     def build(self, input_shape):
-        if input_shape is None:
-            input_shape = self.input_shape
+        if self.input_shape is None:
+            if input_shape is None:
+                raise ValueError('Specify input_shape parameter')
+            self.input_shape = input_shape
 
-        if input_shape is None:
-            raise ValueError('Specify input_shape parameter')
-
-        self.weights = np.random.normal(0.0, 1.0, size=(self.filters, *self.kernel_size))
-        self.biases = np.zeros(shape=self.filters)
-        self.output_shape = (self.filters, *self.input_shape)
+        channels, rows, cols = self.input_shape
+        self.weights = np.random.normal(0.0, 1.0, size=(self.filters, channels, *self.kernel_size))
+        self.biases = np.zeros(shape=(self.filters, channels))
+        self.output_shape = (self.filters, rows, cols)
 
     def forward(self, input, **kwargs):
         input = input.reshape((-1, *self.input_shape))
@@ -193,29 +193,30 @@ class Conv2D(object):
         if self.activation:
             grads = get_activation_gradient(self.activation, self.convs, grads)
 
-        n_samples, padded_rows, padded_cols = self.padded_input.shape
-        output_rows, output_cols = self.input_shape
+        batch_size, channels, padded_rows, padded_cols = self.padded_input.shape
+        _, output_rows, output_cols = self.input_shape
         filter_rows, filter_cols = self.kernel_size
 
-        input_patches = np.zeros((n_samples, 1, output_rows, output_cols, filter_rows, filter_cols))
-        input_grads = np.zeros((self.filters, padded_rows, padded_cols))
+        input_patches = np.zeros((batch_size, 1, channels, output_rows, output_cols, filter_rows, filter_cols))
+        input_grads = np.zeros((batch_size, self.filters, channels, padded_rows, padded_cols))
 
         for row in range(output_rows):
             for col in range(output_cols):
                 rows = slice(row, row + filter_rows)
                 cols = slice(col, col + filter_cols)
 
-                patch = self.padded_input[:, rows, cols]
-                input_patches[:, 0, row, col] = patch
-                input_grads[:, rows, cols] += self.weights
+                patch = self.padded_input[:, :, rows, cols]
+                input_patches[:, 0, :, row, col] = patch
+                input_grads[:, :, :, rows, cols] += self.weights
 
+        grads = np.expand_dims(grads, 2)
         grads = grads.reshape((*grads.shape, 1, 1))
-        weight_grads = np.sum(input_patches * grads, (0, 2, 3)) / n_samples
-        bias_grads = np.sum(grads, (0, 2, 3, 4, 5)) / n_samples
+        weight_grads = np.sum(input_patches * grads, (0, 3, 4)) / batch_size
+        bias_grads = np.repeat(np.sum(grads, (0, 3, 4, 5, 6)), channels, axis=1) / batch_size
 
         (left, right), (top, bottom) = self.padding
-        input_grads = input_grads[top:top + output_rows, left:left + output_cols]
-
+        input_grads = input_grads[:, :, :, top:top + output_rows, left:left + output_cols]
+        input_grads = np.sum(input_grads, axis=1)
         return weight_grads, bias_grads, input_grads
 
 
@@ -229,6 +230,9 @@ class MaxPooling2D(object):
         self.padding = None
 
     def build(self, input_shape):
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
+
         self.input_shape = input_shape
         self.output_shape = np.ceil(np.divide(input_shape, (1, *self.pool_size))).astype(int)
 
@@ -302,6 +306,8 @@ class Dropout(object):
         self.output_shape = None
 
     def build(self, input_shape):
+        if input_shape is None:
+            raise ValueError('Specify input_shape parameter')
         self.output_shape = input_shape
 
     def forward(self, input, training=False):
@@ -372,21 +378,21 @@ def one_hot(y, n_classes):
 
 
 def convolve(input, filters):
-    n_filters, filter_rows, filter_cols = filters.shape
-    batch_size, input_rows, input_cols = input.shape
+    n_filters, channels, filter_rows, filter_cols = filters.shape
+    batch_size, channels, input_rows, input_cols = input.shape
     output_rows = input_rows - filter_rows + 1
     output_cols = input_cols - filter_cols + 1
 
-    input_patches = np.zeros((batch_size, output_cols, output_rows, filter_rows, filter_cols))
+    input_patches = np.zeros((batch_size, channels, output_cols, output_rows, filter_rows, filter_cols))
 
     for row in range(output_rows):
         for col in range(output_cols):
             rows = slice(row, row + filter_rows)
             cols = slice(col, col + filter_cols)
-            patch = input[:, rows, cols]
-            input_patches[:, row, col, :, :] = patch
+            patch = input[:, :, rows, cols]
+            input_patches[:, :, row, col, :, :] = patch
 
-    return np.einsum('bijnm,fnm->bfij', input_patches, filters)
+    return np.einsum('bcijnm,fcnm->bfcij', input_patches, filters).sum(axis=2)
 
 
 def pad(input, filter_shape, stride=(1, 1)):
