@@ -391,8 +391,8 @@ def convolve(input, filters):
             cols = slice(col, col + filter_cols)
             patch = input[:, :, rows, cols]
             input_patches[:, :, row, col, :, :] = patch
-
-    return np.einsum('bcijnm,fcnm->bfcij', input_patches, filters).sum(axis=2)
+    return np.einsum('bcijfn->bfcij', np.tensordot(input_patches, filters, axes=([4, 5], [2, 3])),
+                          optimize=True).sum(axis=2)
 
 
 def pad(input, filter_shape, stride=(1, 1)):
