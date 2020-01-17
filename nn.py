@@ -194,7 +194,7 @@ class Conv2D(object):
             grads = get_activation_gradient(self.activation, self.convs, grads)
 
         batch_size, channels, padded_rows, padded_cols = self.padded_input.shape
-        _, output_rows, output_cols = self.input_shape
+        _, output_rows, output_cols = self.output_shape
         filter_rows, filter_cols = self.kernel_size
 
         input_patches = np.zeros((batch_size, 1, channels, output_rows, output_cols, filter_rows, filter_cols))
@@ -207,16 +207,14 @@ class Conv2D(object):
 
                 patch = self.padded_input[:, :, rows, cols]
                 input_patches[:, 0, :, row, col] = patch
-                input_grads[:, :, :, rows, cols] += self.weights
+                input_grads[:, :, :, rows, cols] += self.weights * grads[:, :, None, row, col, None, None]
 
-        grads = np.expand_dims(grads, 2)
-        grads = grads.reshape((*grads.shape, 1, 1))
-        weight_grads = np.sum(input_patches * grads, (0, 3, 4)) / batch_size
-        bias_grads = np.repeat(np.sum(grads, (0, 3, 4, 5, 6)), channels, axis=1) / batch_size
+        grads_reshaped = np.expand_dims(grads, 2)
+        grads_reshaped = grads_reshaped.reshape((*grads_reshaped.shape, 1, 1))
+        weight_grads = np.sum(input_patches * grads_reshaped, (0, 3, 4)) / batch_size
+        bias_grads = np.repeat(np.sum(grads_reshaped, (0, 3, 4, 5, 6)), channels, axis=1) / batch_size
 
-        (left, right), (top, bottom) = self.padding
-        input_grads = input_grads[:, :, :, top:top + output_rows, left:left + output_cols]
-        input_grads = np.sum(input_grads, axis=1)
+        input_grads = np.sum(trim_padding(input_grads, self.padding), 1) / self.filters
         return weight_grads, bias_grads, input_grads
 
 
@@ -419,3 +417,21 @@ def pad(input, filter_shape, stride=(1, 1)):
     input_padding = ((left, right), (top, bottom))
     output = np.pad(input, (*zero_paddings, *input_padding), mode='constant')
     return output, input_padding
+
+
+def trim_padding(input, padding):
+    (left, right), (top, bottom) = padding
+
+    if left is 0:
+        left = None
+    if right is 0:
+        right = None
+    else:
+        right = -right
+    if top is 0:
+        top = None
+    if bottom is 0:
+        bottom = None
+    else:
+        bottom = -bottom
+    return input[..., top:bottom, left:right]
