@@ -35,6 +35,9 @@ class Model(object):
             batch_size = n_samples
 
         for epoch in range(epochs):
+            if verbose:
+                sys.stdout.write('Epoch %s/%s\n' % (epoch + 1, epochs))
+
             loss = 0.0
             accuracy = 0.0
             for start in range(0, len(X), batch_size):
@@ -54,6 +57,10 @@ class Model(object):
                 grads = cross_entropy_gradient(y_batch, output)
                 self._backward(grads, learning_rate, penalty, alpha)
 
+                if verbose:
+                    sys.stdout.write('\r%*s/%s - loss: %.4f - accuracy: %.4f' % (len(str(len(X))), start + batch_size, len(X), scores['loss'], scores['acc']))
+                    sys.stdout.flush()
+
             n_batches = math.ceil(len(X) / batch_size)
             self.scores['loss'].append(loss / n_batches)
             self.scores['acc'].append(accuracy / n_batches)
@@ -64,8 +71,8 @@ class Model(object):
                 self.scores['val_acc'].append(scores['acc'])
 
             if verbose:
-                sys.stdout.write('\rEpoch %*s/%s - loss: %.3f acc: %.3f'
-                                 % (len(str(epochs)), epoch + 1, epochs, self.scores['loss'][-1], self.scores['acc'][-1]))
+                sys.stdout.write('\r%s/%s - loss: %.4f - accuracy: %.4f'
+                                 % (len(X), len(X), self.scores['loss'][-1], self.scores['acc'][-1]))
                 sys.stdout.flush()
 
             if verbose:
