@@ -316,9 +316,9 @@ class Dropout(object):
         self.output_shape = input_shape
 
     def forward(self, input, training=False):
-        _, units = input.shape
+        _, *sample_shape = input.shape
         if training:
-            self.mask = np.random.binomial(1, self.keep_prob, size=units) / self.keep_prob
+            self.mask = np.random.binomial(1, self.keep_prob, size=sample_shape) / self.keep_prob
             return input * self.mask
         else:
             return input
@@ -397,7 +397,7 @@ def convolve(input, filters):
             patch = input[:, :, rows, cols]
             input_patches[:, :, row, col, :, :] = patch
 
-    return np.einsum('bcijnm,fcnm->bfcij', input_patches, filters).sum(axis=2)
+    return np.einsum('bcijnm,fcnm->bfcij', input_patches, filters, optimize=True).sum(axis=2)
 
 
 def pad(input, filter_shape, stride=(1, 1)):
