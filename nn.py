@@ -182,14 +182,14 @@ class Conv2D(object):
 
         channels, rows, cols = self.input_shape
         self.weights = np.random.normal(0.0, 1.0, size=(self.filters, channels, *self.kernel_size))
-        self.biases = np.zeros(shape=(self.filters, channels))
+        self.biases = np.zeros(shape=(self.filters))
         self.output_shape = (self.filters, rows, cols)
 
     def forward(self, input, **kwargs):
         input = input.reshape((-1, *self.input_shape))
 
         self.padded_input, self.padding = pad(input, self.kernel_size)
-        self.convs = convolve(self.padded_input, self.weights)
+        self.convs = convolve(self.padded_input, self.weights) + self.biases.reshape(1, *self.biases.shape, 1, 1)
 
         if self.activation:
             return apply_activation(self.activation, self.convs)
@@ -219,7 +219,7 @@ class Conv2D(object):
         grads_reshaped = np.expand_dims(grads, 2)
         grads_reshaped = grads_reshaped.reshape((*grads_reshaped.shape, 1, 1))
         weight_grads = np.sum(input_patches * grads_reshaped, (0, 3, 4)) / batch_size
-        bias_grads = np.repeat(np.sum(grads_reshaped, (0, 3, 4, 5, 6)), channels, axis=1) / batch_size
+        bias_grads = np.sum(grads_reshaped, (0, 3, 4, 5, 6)).reshape(-1) / batch_size
 
         input_grads = np.sum(trim_padding(input_grads, self.padding), 1) / self.filters
         return weight_grads, bias_grads, input_grads

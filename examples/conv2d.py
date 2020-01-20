@@ -1,5 +1,8 @@
 from nn import Model, Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.datasets import mnist
+import numpy as np
+
+np.random.seed(1)
 
 (X_train, y_train), (X_test, y_test) = mnist.load_data()
 X_train = X_train.reshape((X_train.shape[0], -1))
@@ -18,4 +21,4 @@ model.add(MaxPooling2D(pool_size=(2, 2)))
 model.add(Flatten())
 model.add(Dense(10, activation='softmax'))
 model.compile()
-model.fit(X_train, y_train, epochs=10, learning_rate=0.001, batch_size=1000, verbose=True)
+model.fit(X_train, y_train, epochs=10, learning_rate=0.1, batch_size=32, verbose=True)
