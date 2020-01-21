@@ -162,9 +162,10 @@ class Dense(object):
 
 class Conv2D(object):
 
-    def __init__(self, filters, kernel_size, activation=None, input_shape=None):
+    def __init__(self, filters, kernel_size, stride=(1, 1), activation=None, input_shape=None):
         self.filters = filters
         self.kernel_size = kernel_size
+        self.stride = stride
         self.activation = activation
         self.input_shape = input_shape
         self.weights = None
@@ -180,16 +181,16 @@ class Conv2D(object):
                 raise ValueError('Specify input_shape parameter')
             self.input_shape = input_shape
 
-        channels, rows, cols = self.input_shape
+        channels, *input_size = self.input_shape
         self.weights = np.random.normal(0.0, 1.0, size=(self.filters, channels, *self.kernel_size))
         self.biases = np.zeros(shape=(self.filters))
-        self.output_shape = (self.filters, rows, cols)
+        self.output_shape = (self.filters, *np.divide(input_size, self.stride).astype(int))
 
     def forward(self, input, **kwargs):
         input = input.reshape((-1, *self.input_shape))
 
-        self.padded_input, self.padding = pad(input, self.kernel_size)
-        self.convs = convolve(self.padded_input, self.weights) + self.biases.reshape(1, *self.biases.shape, 1, 1)
+        self.padded_input, self.padding = pad(input, self.kernel_size, self.stride)
+        self.convs = convolve(self.padded_input, self.weights, self.stride) + self.biases.reshape(1, *self.biases.shape, 1, 1)
 
         if self.activation:
             return apply_activation(self.activation, self.convs)
@@ -201,6 +202,7 @@ class Conv2D(object):
             grads = get_activation_gradient(self.activation, self.convs, grads)
 
         batch_size, channels, padded_rows, padded_cols = self.padded_input.shape
+        row_stride, col_stride = self.stride
         _, output_rows, output_cols = self.output_shape
         filter_rows, filter_cols = self.kernel_size
 
@@ -211,9 +213,11 @@ class Conv2D(object):
             for col in range(output_cols):
                 rows = slice(row, row + filter_rows)
                 cols = slice(col, col + filter_cols)
-
                 patch = self.padded_input[:, :, rows, cols]
                 input_patches[:, 0, :, row, col] = patch
+
+                rows = slice(row * row_stride, row * row_stride + filter_rows)
+                cols = slice(col * col_stride, col * col_stride + filter_cols)
                 input_grads[:, :, :, rows, cols] += self.weights * grads[:, :, None, row, col, None, None]
 
         grads_reshaped = np.expand_dims(grads, 2)
@@ -382,16 +386,17 @@ def one_hot(y, n_classes):
     return np.eye(n_classes)[y]
 
 
-def convolve(input, filters):
+def convolve(input, filters, stride):
     n_filters, channels, filter_rows, filter_cols = filters.shape
     batch_size, channels, input_rows, input_cols = input.shape
-    output_rows = input_rows - filter_rows + 1
-    output_cols = input_cols - filter_cols + 1
+    row_stride, col_stride = stride
+    output_rows = (input_rows - filter_rows) // row_stride + 1
+    output_cols = (input_cols - filter_cols) // col_stride + 1
 
     input_patches = np.zeros((batch_size, channels, output_cols, output_rows, filter_rows, filter_cols))
 
-    for row in range(output_rows):
-        for col in range(output_cols):
+    for row in range(0, output_rows, row_stride):
+        for col in range(0, output_cols, col_stride):
             rows = slice(row, row + filter_rows)
             cols = slice(col, col + filter_cols)
             patch = input[:, :, rows, cols]
