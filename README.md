@@ -1,1 +1,1 @@
-# machine-learning
+# Neural Network from scratch
