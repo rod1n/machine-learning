@@ -6,6 +6,8 @@ def get_activation_function(activation):
         return softmax
     elif activation is 'sigmoid':
         return sigmoid
+    elif activation is 'relu':
+        return relu
     else:
         raise ValueError("The activation '%s' is not supported" % activation)
 
@@ -16,6 +18,8 @@ def apply_activation_gradients(activation, values, grads):
         return np.einsum('ijk,ik->ij', jacobian, grads)
     elif activation is 'sigmoid':
         return sigmoid_gradient(values) * grads
+    elif activation is 'relu':
+        return relu_gradient(values) * grads
     else:
         raise ValueError("The activation '%s' is not supported" % activation)
 
@@ -41,3 +45,11 @@ def sigmoid(x):
 def sigmoid_gradient(x):
     s = sigmoid(x)
     return s * (1 - s)
+
+
+def relu(x):
+    return np.maximum(0, x)
+
+
+def relu_gradient(x):
+    return np.where(x <= 0, 0, 1)

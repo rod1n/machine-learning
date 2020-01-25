@@ -14,10 +14,9 @@ X_test = X_test.reshape((X_test.shape[0], -1))
 X_test = X_test / 255
 
 model = Model()
-model.add(Conv2D(16, kernel_size=(3, 3), stride=(2, 2), activation='sigmoid', input_shape=(1, 28, 28)))
-model.add(MaxPooling2D(pool_size=(4, 4)))
-model.add(Dropout(keep_prob=0.8))
-model.add(Conv2D(4, (2, 2), activation='sigmoid'))
+model.add(Conv2D(16, kernel_size=(2, 2), activation='relu', input_shape=(1, 28, 28)))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Conv2D(4, (2, 2), activation='relu'))
 model.add(MaxPooling2D(pool_size=(2, 2)))
 model.add(Flatten())
 model.add(Dense(10, activation='softmax'))
