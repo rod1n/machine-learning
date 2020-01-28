@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import math
 from nn.losses import categorical_cross_entropy, cross_entropy_gradient
-from nn.utils import to_categorical
+from nn.utils import to_categorical, split
 
 
 class Model(object):
@@ -24,7 +24,7 @@ class Model(object):
         self.scores = {'loss': [], 'acc': []}
 
         if validation_fraction:
-            X, y, X_val, y_val = self._validation_split(X, y, validation_fraction)
+            (X, y), (X_val, y_val) = split(X, y, fraction=validation_fraction)
             self.scores['val_loss'] = []
             self.scores['val_acc'] = []
         else:
@@ -89,14 +89,6 @@ class Model(object):
         loss = np.sum(categorical_cross_entropy(to_categorical(y, n_classes), output)) / len(X)
         accuracy = np.sum(y == np.argmax(output, axis=1)) / len(X)
         return output, {'loss': loss, 'acc': accuracy}
-
-    def _validation_split(self, X, y, fraction):
-        n_val_samples = math.ceil(fraction * len(X))
-        X_val = X[0:n_val_samples]
-        y_val = y[0:n_val_samples]
-        X = X[n_val_samples:]
-        y = y[n_val_samples:]
-        return X, y, X_val, y_val
 
     def _forward(self, X, training=False):
         output = X
