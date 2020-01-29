@@ -3,9 +3,16 @@ import math
 from nn.activations import get_activation_function, apply_activation_gradients
 
 
-class Dense(object):
+class Layer(object):
+
+    def __init__(self):
+        self.opt_params = None
+
+
+class Dense(Layer):
 
     def __init__(self, units, activation=None, input_shape=None):
+        super().__init__()
         self.units = units
         self.activation = activation
         self.input_shape = input_shape
@@ -48,9 +55,10 @@ class Dense(object):
         return weight_grads, bias_grads, grads
 
 
-class Conv2D(object):
+class Conv2D(Layer):
 
     def __init__(self, filters, kernel_size, stride=(1, 1), activation=None, input_shape=None):
+        super().__init__()
         self.filters = filters
         self.kernel_size = kernel_size
         self.stride = stride
@@ -118,9 +126,10 @@ class Conv2D(object):
         return weight_grads, bias_grads, input_grads
 
 
-class MaxPooling2D(object):
+class MaxPooling2D(Layer):
 
     def __init__(self, pool_size=(2, 2)):
+        super().__init__()
         self.pool_size = pool_size
         self.pool_mask = None
         self.input_shape = None
@@ -175,9 +184,10 @@ class MaxPooling2D(object):
         return None, None, input_grads
 
 
-class Flatten(object):
+class Flatten(Layer):
 
     def __init__(self):
+        super().__init__()
         self.input_shape = None
         self.output_shape = None
 
@@ -196,9 +206,10 @@ class Flatten(object):
         return None, None, grads
 
 
-class Dropout(object):
+class Dropout(Layer):
 
     def __init__(self, keep_prob):
+        super().__init__()
         self.keep_prob = keep_prob
         self.mask = None
         self.output_shape = None

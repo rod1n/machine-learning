@@ -10,17 +10,19 @@ class Model(object):
     def __init__(self):
         self.layers = []
         self.scores = None
+        self.optimizer = None
 
     def add(self, layer):
         self.layers.append(layer)
 
-    def compile(self):
+    def compile(self, optimizer):
+        self.optimizer = optimizer
         input_shape = None
         for layer in self.layers:
             layer.build(input_shape)
             input_shape = layer.output_shape
 
-    def fit(self, X, y, epochs=10, learning_rate=0.01, batch_size=200, penalty=None, alpha=0.1, validation_fraction=0, verbose=False):
+    def fit(self, X, y, epochs=10, batch_size=200, penalty=None, alpha=0.1, validation_fraction=0, verbose=False):
         self.scores = {'loss': [], 'acc': []}
 
         if validation_fraction:
@@ -57,7 +59,7 @@ class Model(object):
 
                 y_batch = to_categorical(y[batch_slice], output.shape[1])
                 grads = cross_entropy_gradient(y_batch, output)
-                self._backward(grads, learning_rate, penalty, alpha)
+                self._backward(grads, penalty, alpha)
 
                 if verbose:
                     sys.stdout.write('\r%*s/%s - loss: %.4f - accuracy: %.4f' % (len(str(len(X))), start + batch_size, len(X), scores['loss'], scores['acc']))
@@ -96,7 +98,7 @@ class Model(object):
             output = layer.forward(output, training=training)
         return output
 
-    def _backward(self, grads, learning_rate, penalty, alpha):
+    def _backward(self, grads, penalty, alpha):
         n_samples, _ = grads.shape
 
         for layer in reversed(self.layers):
@@ -106,5 +108,4 @@ class Model(object):
                 if penalty is 'l2':
                     weight_grads += alpha * layer.weights / n_samples
 
-                layer.weights -= learning_rate * weight_grads
-                layer.biases -= learning_rate * bias_grads
+                self.optimizer.update(layer, weight_grads, bias_grads)
