@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class SGD(object):
 
     def __init__(self, learning_rate=0.1, momentum=0.0, decay=0.0, nesterov=False):
@@ -28,3 +31,31 @@ class SGD(object):
         if self.nesterov:
             velocity = self.momentum * velocity - learning_rate * grads
         return velocity
+
+
+class Adagrad(object):
+
+    def __init__(self, learning_rate=0.1, decay=0.0):
+        self.learning_rate = learning_rate
+        self.decay = decay
+        self.iteration = 0
+
+    def update(self, layer, weight_grads, bias_grads):
+        if layer.opt_params is None:
+            layer.opt_params = {
+                'accumulated_weight_grads': 1e-12,
+                'accumulated_bias_grads': 1e-12
+            }
+        self.iteration += 1
+
+        layer.opt_params['accumulated_weight_grads'] += weight_grads ** 2
+        layer.opt_params['accumulated_bias_grads'] += bias_grads ** 2
+
+        layer.weights -= self._get_velocity(weight_grads, layer.opt_params['accumulated_weight_grads'])
+        layer.biases -= self._get_velocity(bias_grads, layer.opt_params['accumulated_bias_grads'])
+
+    def _get_velocity(self, grads, accumulated_grads):
+        learning_rate = self.learning_rate * (1. / (1. + self.decay * self.iteration))
+        adaptive_learning_rate = learning_rate / np.sqrt(accumulated_grads)
+        return adaptive_learning_rate * grads
+
