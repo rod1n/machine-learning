@@ -6,7 +6,7 @@ from nn.activations import get_activation_function, apply_activation_gradients
 class Layer(object):
 
     def __init__(self):
-        self.opt_params = None
+        self.opt_params = {}
 
 
 class Dense(Layer):

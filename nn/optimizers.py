@@ -11,26 +11,25 @@ class SGD(object):
         self.iteration = 0
 
     def update(self, layer, weight_grads, bias_grads):
-        if layer.opt_params is None:
-            layer.opt_params = {
-                'weight_velocity': 0.0,
-                'bias_velocity': 0.0
-            }
         self.iteration += 1
+        self._update_variable(layer, 'weights', weight_grads)
+        self._update_variable(layer, 'biases', bias_grads)
 
-        layer.opt_params['weight_velocity'] = self._get_velocity(weight_grads, layer.opt_params['weight_velocity'])
-        layer.opt_params['bias_velocity'] = self._get_velocity(bias_grads, layer.opt_params['bias_velocity'])
-
-        layer.weights += layer.opt_params['weight_velocity']
-        layer.biases += layer.opt_params['bias_velocity']
-
-    def _get_velocity(self, grads, current_velocity):
+    def _update_variable(self, layer, name, grads):
         learning_rate = self.learning_rate * (1. / (1. + self.decay * self.iteration))
 
-        velocity = self.momentum * current_velocity - learning_rate * grads
+        if name not in layer.opt_params:
+            layer.opt_params[name] = {'velocity': 0.0}
+
+        velocity = layer.opt_params[name]['velocity']
+        velocity = self.momentum * velocity - learning_rate * grads
         if self.nesterov:
             velocity = self.momentum * velocity - learning_rate * grads
-        return velocity
+
+        layer.opt_params[name]['velocity'] = velocity
+
+        variable = getattr(layer, name)
+        variable += velocity
 
 
 class Adagrad(object):
@@ -41,23 +40,20 @@ class Adagrad(object):
         self.iteration = 0
 
     def update(self, layer, weight_grads, bias_grads):
-        if layer.opt_params is None:
-            layer.opt_params = {
-                'accumulated_weight_grads': 1e-12,
-                'accumulated_bias_grads': 1e-12
-            }
         self.iteration += 1
+        self._update_variable(layer, 'weights', weight_grads)
+        self._update_variable(layer, 'biases', bias_grads)
 
-        layer.opt_params['accumulated_weight_grads'] += weight_grads ** 2
-        layer.opt_params['accumulated_bias_grads'] += bias_grads ** 2
+    def _update_variable(self, layer, name, grads):
+        if name not in layer.opt_params:
+            layer.opt_params[name] = {'accumulated_grads': 1e-12}
 
-        layer.weights -= self._get_velocity(weight_grads, layer.opt_params['accumulated_weight_grads'])
-        layer.biases -= self._get_velocity(bias_grads, layer.opt_params['accumulated_bias_grads'])
-
-    def _get_velocity(self, grads, accumulated_grads):
+        layer.opt_params[name]['accumulated_grads'] += grads ** 2
         learning_rate = self.learning_rate * (1. / (1. + self.decay * self.iteration))
-        adaptive_learning_rate = learning_rate / np.sqrt(accumulated_grads)
-        return adaptive_learning_rate * grads
+        adaptive_learning_rate = learning_rate / np.sqrt(layer.opt_params[name]['accumulated_grads'])
+
+        variable = getattr(layer, name)
+        variable -= adaptive_learning_rate * grads
 
 
 class RMSProp(object):
@@ -69,22 +65,21 @@ class RMSProp(object):
         self.iteration = 0
 
     def update(self, layer, weight_grads, bias_grads):
-        if layer.opt_params is None:
-            layer.opt_params = {
-                'accumulated_weight_grads': 1e-12,
-                'accumulated_bias_grads': 1e-12
-            }
         self.iteration += 1
+        self._update_variable(layer, 'weights', weight_grads)
+        self._update_variable(layer, 'biases', bias_grads)
 
-        layer.opt_params['accumulated_weight_grads'] = \
-            self.rho * layer.opt_params['accumulated_weight_grads'] + (1 - self.rho) * weight_grads ** 2
-        layer.opt_params['accumulated_bias_grads'] = \
-            self.rho * layer.opt_params['accumulated_bias_grads'] + (1 - self.rho) * bias_grads ** 2
+    def _update_variable(self, layer, name, grads):
+        if name not in layer.opt_params:
+            layer.opt_params[name] = {'accumulated_grads': 1e-12}
 
-        layer.weights -= self._get_velocity(weight_grads, layer.opt_params['accumulated_weight_grads'])
-        layer.biases -= self._get_velocity(bias_grads, layer.opt_params['accumulated_bias_grads'])
+        accumulated_grads = layer.opt_params[name]['accumulated_grads']
+        accumulated_grads = self.rho * accumulated_grads + (1 - self.rho) * grads ** 2
 
-    def _get_velocity(self, grads, accumulated_grads):
         learning_rate = self.learning_rate * (1. / (1. + self.decay * self.iteration))
         adaptive_learning_rate = learning_rate / np.sqrt(accumulated_grads)
-        return adaptive_learning_rate * grads
+
+        layer.opt_params[name]['accumulated_grads'] = accumulated_grads
+
+        variable = getattr(layer, name)
+        variable -= adaptive_learning_rate * grads
