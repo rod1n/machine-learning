@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from nn.activations import get_activation_function, apply_activation_gradients
+from nn.initializers import RandomNormal
 
 
 class Layer(object):
@@ -11,10 +12,14 @@ class Layer(object):
 
 class Dense(Layer):
 
-    def __init__(self, units, activation=None, input_shape=None):
+    def __init__(self, units,
+                 activation=None,
+                 weight_initializer=RandomNormal(),
+                 input_shape=None):
         super().__init__()
         self.units = units
         self.activation = activation
+        self.weight_initializer = weight_initializer
         self.input_shape = input_shape
         self.input = None
         self.weights = None
@@ -28,7 +33,7 @@ class Dense(Layer):
         if input_shape is None:
             raise ValueError('Specify input_shape parameter')
 
-        self.weights = np.random.normal(0.0, 1.0, size=(*input_shape, self.units))
+        self.weights = self.weight_initializer.get_values((*input_shape, self.units))
         self.biases = np.zeros(shape=self.units)
         self.output_shape = (self.units,)
 
@@ -57,12 +62,18 @@ class Dense(Layer):
 
 class Conv2D(Layer):
 
-    def __init__(self, filters, kernel_size, stride=(1, 1), activation=None, input_shape=None):
+    def __init__(self, filters,
+                 kernel_size,
+                 stride=(1, 1),
+                 activation=None,
+                 weight_initializer=RandomNormal(),
+                 input_shape=None):
         super().__init__()
         self.filters = filters
         self.kernel_size = kernel_size
         self.stride = stride
         self.activation = activation
+        self.weight_initializer = weight_initializer
         self.input_shape = input_shape
         self.weights = None
         self.biases = None
@@ -78,7 +89,7 @@ class Conv2D(Layer):
             self.input_shape = input_shape
 
         channels, *input_size = self.input_shape
-        self.weights = np.random.normal(0.0, 1.0, size=(self.filters, channels, *self.kernel_size))
+        self.weights = self.weight_initializer.get_values((self.filters, channels, *self.kernel_size))
         self.biases = np.zeros(shape=(self.filters))
         self.output_shape = (self.filters, *np.divide(input_size, self.stride).astype(int))
 
