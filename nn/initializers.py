@@ -19,3 +19,9 @@ class RandomUniform(object):
 
     def get_values(self, shape):
         return np.random.uniform(self.low, self.high, size=shape)
+
+
+class Zeros(object):
+
+    def get_values(self, shape):
+        return np.zeros(shape)

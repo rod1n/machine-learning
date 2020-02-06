@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from nn.activations import get_activation_function, apply_activation_gradients
-from nn.initializers import RandomNormal
+from nn.initializers import RandomNormal, Zeros
 
 
 class Layer(object):
@@ -15,11 +15,13 @@ class Dense(Layer):
     def __init__(self, units,
                  activation=None,
                  weight_initializer=RandomNormal(),
+                 bias_initializer=Zeros(),
                  input_shape=None):
         super().__init__()
         self.units = units
         self.activation = activation
         self.weight_initializer = weight_initializer
+        self.bias_initializer = bias_initializer
         self.input_shape = input_shape
         self.input = None
         self.weights = None
@@ -67,6 +69,7 @@ class Conv2D(Layer):
                  stride=(1, 1),
                  activation=None,
                  weight_initializer=RandomNormal(),
+                 bias_initializer=Zeros(),
                  input_shape=None):
         super().__init__()
         self.filters = filters
@@ -74,6 +77,7 @@ class Conv2D(Layer):
         self.stride = stride
         self.activation = activation
         self.weight_initializer = weight_initializer
+        self.bias_initializer = bias_initializer
         self.input_shape = input_shape
         self.weights = None
         self.biases = None
@@ -90,7 +94,7 @@ class Conv2D(Layer):
 
         channels, *input_size = self.input_shape
         self.weights = self.weight_initializer.get_values((self.filters, channels, *self.kernel_size))
-        self.biases = np.zeros(shape=(self.filters))
+        self.biases = self.bias_initializer.get_values((self.filters,))
         self.output_shape = (self.filters, *np.divide(input_size, self.stride).astype(int))
 
     def forward(self, input, **kwargs):
