@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 
 class RandomNormal(object):
@@ -19,6 +20,22 @@ class RandomUniform(object):
 
     def get_values(self, shape):
         return np.random.uniform(self.low, self.high, size=shape)
+
+
+class GlorotNormal(object):
+
+    def get_values(self, shape):
+        fan_in, fan_out = shape[-2:]
+        stddev = math.sqrt(2 / (fan_in + fan_out))
+        return np.random.normal(0.0, stddev, size=shape)
+
+
+class GlorotUniform(object):
+
+    def get_values(self, shape):
+        fan_in, fan_out = shape[-2:]
+        boundary = math.sqrt(6 / (fan_in + fan_out))
+        return np.random.uniform(-boundary, boundary, size=shape)
 
 
 class Zeros(object):
