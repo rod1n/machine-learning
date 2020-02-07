@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from nn.activations import get_activation_function, apply_activation_gradients
-from nn.initializers import RandomNormal, Zeros
+from nn.initializers import RandomNormal, Zeros, GlorotNormal
 
 
 class Layer(object):
@@ -68,7 +68,7 @@ class Conv2D(Layer):
                  kernel_size,
                  stride=(1, 1),
                  activation=None,
-                 weight_initializer=RandomNormal(),
+                 weight_initializer=GlorotNormal(),
                  bias_initializer=Zeros(),
                  input_shape=None):
         super().__init__()
