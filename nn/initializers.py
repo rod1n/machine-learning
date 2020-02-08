@@ -38,6 +38,22 @@ class GlorotUniform(object):
         return np.random.uniform(-boundary, boundary, size=shape)
 
 
+class HeNormal(object):
+
+    def get_values(self, shape):
+        fan_in, _ = _compute_fans(shape)
+        stddev = math.sqrt(2 / fan_in)
+        return np.random.normal(0.0, stddev, size=shape)
+
+
+class HeUniform(object):
+
+    def get_values(self, shape):
+        fan_in, _ = _compute_fans(shape)
+        boundary = math.sqrt(2 / fan_in)
+        return np.random.uniform(-boundary, boundary, size=shape)
+
+
 def _compute_fans(shape):
     if len(shape) == 2:
         fan_in, fan_out = shape
