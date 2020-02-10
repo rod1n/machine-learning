@@ -16,12 +16,14 @@ class Dense(Layer):
                  activation=None,
                  weight_initializer=RandomNormal(),
                  bias_initializer=Zeros(),
+                 regularizer=None,
                  input_shape=None):
         super().__init__()
         self.units = units
         self.activation = activation
         self.weight_initializer = weight_initializer
         self.bias_initializer = bias_initializer
+        self.regularizer = regularizer
         self.input_shape = input_shape
         self.input = None
         self.weights = None
