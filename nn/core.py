@@ -1,6 +1,8 @@
 import sys
 import numpy as np
 import math
+
+from nn.callbacks import ScoresCallback, LoggingCallback
 from nn.losses import categorical_cross_entropy, cross_entropy_gradient
 from nn.utils import to_categorical, split
 
@@ -9,7 +11,7 @@ class Model(object):
 
     def __init__(self):
         self.layers = []
-        self.scores = None
+        self.scorer = ScoresCallback()
         self.optimizer = None
 
     def add(self, layer):
@@ -23,16 +25,25 @@ class Model(object):
             input_shape = layer.output_shape
 
     def fit(self, X, y, epochs=10, batch_size=200, validation_fraction=0, shuffle=True, verbose=False):
-        self.scores = {'loss': [], 'acc': [], 'val_loss': [], 'val_acc': []}
+        callbacks = [self.scorer]
+        if verbose:
+            callbacks.append(LoggingCallback())
 
-        val_data = None
+        val_dataset = None
         if validation_fraction:
-            (X, y), val_data = split(X, y, fraction=validation_fraction)
+            (X, y), val_dataset = split(X, y, fraction=validation_fraction)
 
         if batch_size is None:
             batch_size, _ = X.shape
 
+        for callback in callbacks:
+            callback.on_train_begin((X, y), val_dataset)
+
         for epoch in range(epochs):
+
+            for callback in callbacks:
+                callback.on_batch_begin((X, y), val_dataset)
+
             if verbose:
                 sys.stdout.write('Epoch %s/%s\n' % (epoch + 1, epochs))
 
@@ -40,8 +51,6 @@ class Model(object):
                 p = np.random.permutation(len(X))
                 X, y = X[p], y[p]
 
-            total_loss = 0.0
-            total_accuracy = 0.0
             for start in range(0, len(X), batch_size):
                 end = start + batch_size
                 batch_slice = slice(start, end)
@@ -49,31 +58,26 @@ class Model(object):
                 output = self._forward(X[batch_slice], training=True)
 
                 loss = self._compute_loss(output, y[batch_slice]) + self._compute_penalty(len(X))
-                accuracy = self._compute_accuracy(output, y[batch_slice])
-
-                total_loss += loss
-                total_accuracy += accuracy
 
                 y_batch = to_categorical(y[batch_slice], output.shape[1])
                 grads = cross_entropy_gradient(y_batch, output)
                 self._backward(grads)
 
+                for callback in callbacks:
+                    callback.on_batch_end(output, loss)
+
                 if verbose:
                     sys.stdout.write('\r%*s/%s - loss: %.4f - accuracy: %.4f' % (len(str(len(X))), start + batch_size, len(X), loss, accuracy))
                     sys.stdout.flush()
 
-            n_batches = math.ceil(len(X) / batch_size)
-            self.scores['loss'].append(total_loss / n_batches)
-            self.scores['acc'].append(total_accuracy / n_batches)
+            val_output, val_loss = None, None
+            if val_dataset is not None:
+                val_output = self._forward(X)
+                val_loss = self._compute_loss(val_output, y) + self._compute_penalty(len(X))
 
-            if val_data:
-                self._validate(*val_data, self._compute_penalty(len(X)))
+            for callback in callbacks:
+                callback.on_epoch_end(val_output, val_loss)
 
-            if verbose:
-                sys.stdout.write('\r%s/%s - loss: %.4f - accuracy: %.4f'
-                                 % (len(X), len(X), self.scores['loss'][-1], self.scores['acc'][-1]))
-                sys.stdout.write('\n')
-                sys.stdout.flush()
 
     def predict(self, X):
         return np.argmax(self._forward(X), axis=1)
@@ -83,11 +87,6 @@ class Model(object):
         loss = self._compute_loss(output, y)
         accuracy = self._compute_accuracy(output, y)
         return output, {'loss': loss, 'acc': accuracy}
-
-    def _validate(self, X, y, penalty):
-        val_output = self._forward(X)
-        self.scores['val_loss'].append(self._compute_loss(val_output, y) + penalty)
-        self.scores['val_acc'].append(self._compute_accuracy(val_output, y))
 
     def _compute_loss(self, output, y):
         n_samples, n_classes = output.shape
