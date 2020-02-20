@@ -23,20 +23,14 @@ class Model(object):
             input_shape = layer.output_shape
 
     def fit(self, X, y, epochs=10, batch_size=200, validation_fraction=0, verbose=False):
-        self.scores = {'loss': [], 'acc': []}
+        self.scores = {'loss': [], 'acc': [], 'val_loss': [], 'val_acc': []}
 
+        val_data = None
         if validation_fraction:
-            (X, y), (X_val, y_val) = split(X, y, fraction=validation_fraction)
-            self.scores['val_loss'] = []
-            self.scores['val_acc'] = []
-        else:
-            X_val = None
-            y_val = None
-
-        n_samples, _ = X.shape
+            (X, y), val_data = split(X, y, fraction=validation_fraction)
 
         if batch_size is None:
-            batch_size = n_samples
+            batch_size, _ = X.shape
 
         for epoch in range(epochs):
             if verbose:
@@ -49,8 +43,8 @@ class Model(object):
                 batch_slice = slice(start, end)
 
                 output = self._forward(X[batch_slice], training=True)
-                loss = self._compute_loss(output, y[batch_slice])
-                loss += self._compute_penalty(len(X))
+
+                loss = self._compute_loss(output, y[batch_slice]) + self._compute_penalty(len(X))
                 accuracy = self._compute_accuracy(output, y[batch_slice])
 
                 total_loss += loss
@@ -68,18 +62,14 @@ class Model(object):
             self.scores['loss'].append(total_loss / n_batches)
             self.scores['acc'].append(total_accuracy / n_batches)
 
-            if validation_fraction:
-                val_output = self._forward(X_val)
-                self.scores['val_loss'].append(self._compute_loss(val_output, y_val) + self._compute_penalty(len(X)))
-                self.scores['val_acc'].append(self._compute_accuracy(val_output, y_val))
+            if val_data:
+                self._validate(*val_data, self._compute_penalty(len(X)))
 
             if verbose:
                 sys.stdout.write('\r%s/%s - loss: %.4f - accuracy: %.4f'
                                  % (len(X), len(X), self.scores['loss'][-1], self.scores['acc'][-1]))
-                sys.stdout.flush()
-
-            if verbose:
                 sys.stdout.write('\n')
+                sys.stdout.flush()
 
     def predict(self, X):
         return np.argmax(self._forward(X), axis=1)
@@ -89,6 +79,11 @@ class Model(object):
         loss = self._compute_loss(output, y)
         accuracy = self._compute_accuracy(output, y)
         return output, {'loss': loss, 'acc': accuracy}
+
+    def _validate(self, X, y, penalty):
+        val_output = self._forward(X)
+        self.scores['val_loss'].append(self._compute_loss(val_output, y) + penalty)
+        self.scores['val_acc'].append(self._compute_accuracy(val_output, y))
 
     def _compute_loss(self, output, y):
         n_samples, n_classes = output.shape
