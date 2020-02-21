@@ -22,7 +22,7 @@ class Model(object):
             layer.build(input_shape)
             input_shape = layer.output_shape
 
-    def fit(self, X, y, epochs=10, batch_size=200, validation_fraction=0, verbose=False):
+    def fit(self, X, y, epochs=10, batch_size=200, validation_fraction=0, shuffle=True, verbose=False):
         self.scores = {'loss': [], 'acc': [], 'val_loss': [], 'val_acc': []}
 
         val_data = None
@@ -35,6 +35,10 @@ class Model(object):
         for epoch in range(epochs):
             if verbose:
                 sys.stdout.write('Epoch %s/%s\n' % (epoch + 1, epochs))
+
+            if shuffle:
+                p = np.random.permutation(len(X))
+                X, y = X[p], y[p]
 
             total_loss = 0.0
             total_accuracy = 0.0
