@@ -248,6 +248,59 @@ class Dropout(Layer):
         return None, None, grads * self.mask
 
 
+class BatchNorm2D(Layer):
+
+    def __init__(self):
+        super().__init__()
+        self.output_shape = None
+        self.weights = None
+        self.biases = None
+        self.mean_axes = None
+
+        self.input = None
+        self.zero_mean = None
+        self.std_dev = None
+        self.std_input = None
+
+    def build(self, input_shape):
+        if len(input_shape) == 1:
+            # For Dense layer output shape
+            # mean is computed alone batch size axis
+            self.mean_axes = (0,)
+            weights_shape = (1, input_shape[0],)
+        elif len(input_shape) == 3:
+            # For Conv2D layer output shape
+            # mean is computed alone batch size,
+            # feature map height and width axes
+            self.mean_axes = (0, 2, 3)
+            weights_shape = (1, input_shape[0], 1, 1)
+        else:
+            raise ValueError('Unsupported input_shape {}'.format(input_shape))
+
+        self.output_shape = input_shape
+        self.weights = np.ones(weights_shape)
+        self.biases = np.zeros(weights_shape)
+
+    def forward(self, input, **kwargs):
+        self.input = input
+        mean = np.mean(input, axis=self.mean_axes, keepdims=True)
+        self.zero_mean = input - mean
+        variance = np.mean(self.zero_mean ** 2, axis=self.mean_axes, keepdims=True)
+        self.std_dev = np.sqrt(variance) + 1e-9
+        self.std_input = self.zero_mean / self.std_dev
+        return self.weights * self.std_input + self.biases
+
+    def backward(self, grads):
+        n = len(self.input)
+        weight_grads = np.mean(self.std_input * grads, axis=self.mean_axes, keepdims=True)
+        bias_grads = np.mean(grads, axis=self.mean_axes, keepdims=True)
+        zero_mean_grads = 1 - 1 / n
+        std_dev_grads = (-1 / self.std_dev) * (2 * self.zero_mean / n) * zero_mean_grads
+        std_input_grads = (zero_mean_grads * self.std_dev - self.zero_mean * std_dev_grads) / self.std_dev ** 2
+        input_grads = std_input_grads * self.weights * grads
+        return weight_grads, bias_grads, input_grads
+
+
 def convolve(input, filters, stride):
     n_filters, channels, filter_rows, filter_cols = filters.shape
     batch_size, channels, input_rows, input_cols = input.shape
