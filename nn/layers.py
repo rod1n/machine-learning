@@ -72,6 +72,7 @@ class Conv2D(Layer):
                  activation=None,
                  weight_initializer=GlorotNormal(),
                  bias_initializer=Zeros(),
+                 regularizer=None,
                  input_shape=None):
         super().__init__()
         self.filters = filters
@@ -80,6 +81,7 @@ class Conv2D(Layer):
         self.activation = activation
         self.weight_initializer = weight_initializer
         self.bias_initializer = bias_initializer
+        self.regularizer = regularizer
         self.input_shape = input_shape
         self.weights = None
         self.biases = None
